@@ -14,6 +14,7 @@ from starlette.responses import StreamingResponse
 import data.database
 import classes
 from data import auth, database
+from exceptions import Error
 from hashes import HashManager
 
 app = FastAPI(
@@ -103,7 +104,7 @@ async def send(
     dest: int
 ):
     if not check(current_user.id, dest):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.CHAT_FORBIDDEN
     current_datetime = datetime.now().isoformat()
     messages = database.get_messages(dest)
     if len(messages) == 0:
@@ -133,7 +134,7 @@ def get_chat(
     chat: str
 ):
     if database.get_chat(int(chat)) == -1 and len(chat) == 10:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        raise Error.CHAT_NOT_FOUND
     if database.get_chat(int(chat)) == -1 and len(chat) == 8:
         name = current_user.username + " , " + str(database.get_user_by_id(int(chat)).username)
         chat_id = create_chat(name, "chat", str(current_user.id))
@@ -142,7 +143,7 @@ def get_chat(
         auth.refresh_db()
         return {"id": chat_id}
     if not check(current_user.id, chat):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.CHAT_FORBIDDEN
     return database.get_messages(chat)
 
 
@@ -153,7 +154,7 @@ def get_message(
     id: int
 ):
     if not check(current_user.id, chat):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.CHAT_FORBIDDEN
     return database.get_message(chat, id)
 
 
@@ -165,10 +166,10 @@ def edit_message(
     msg: classes.Msg
 ):
     if not check(current_user.id, chat):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.CHAT_FORBIDDEN
     message = database.get_message(chat, id)
     if message["author"] != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.ACTION_FORBIDDEN
     database.edit_message(chat, id, msg.message)
     message = database.get_message(chat, id)
     return {message["id"]: message["message"]}
@@ -181,10 +182,10 @@ def edit_message(
     id: int
 ):
     if not check(current_user.id, chat):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.CHAT_FORBIDDEN
     message = database.get_message(chat, id)
     if message["author"] != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+        raise Error.ACTION_FORBIDDEN
     database.delete_message(chat, id)
     return {message["id"]: message["message"]}
 
@@ -195,7 +196,7 @@ def get_media(
 ):
     result = database.get_media(hash)
     if not result:
-        raise HTTPException(status_code=404, detail="Файл не найден")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
     filename, blob_data = result
 
