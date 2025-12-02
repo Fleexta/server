@@ -1,14 +1,18 @@
 #  Copyright (c) 2025 Timofei Kirsanov
-
+import asyncio
 import io
+import json
 import mimetypes
 import random
+import uuid
 from datetime import datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Iterable
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Depends, status, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
+from sse_starlette import EventSourceResponse
+from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 import data.database
@@ -20,8 +24,11 @@ from hashes import HashManager
 app = FastAPI(
     title="Fleexta server",
     description="Server API for Fleexta",
-    version="0.5.1"
+    version="0.5.2"
 )
+
+STREAM_DELAY = 1
+RETRY_TIMEOUT = 15000
 
 
 def check(user_id, chat_id):
@@ -48,6 +55,49 @@ def create_chat(name: str, types: str, member: str):
             create_chat(name, types, member)
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Types is wrong")
+
+
+def get_new_messages(chat) -> Iterable:
+    chat_id = uuid.uuid4()
+    return [
+        {
+            "event": f"chat-{chat}",
+            "retry": RETRY_TIMEOUT,
+            "data": json.dumps(
+                database.get_messages(chat)
+            ),
+            "id": str(chat_id),
+        }
+    ]
+
+
+async def event_generator(request: Request, chat):
+    while True:
+        if await request.is_disconnected():
+            break
+        for message in get_new_messages(chat):
+            yield message
+        await asyncio.sleep(STREAM_DELAY)
+
+
+@app.get("/c/{chat}")
+async def message_stream(
+        request: Request,
+        current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
+        chat: str
+):
+    if database.get_chat(int(chat)) == -1 and len(chat) == 10:
+        raise Error.CHAT_NOT_FOUND
+    if database.get_chat(int(chat)) == -1 and len(chat) == 8:
+        name = current_user.username + " , " + str(database.get_user_by_id(int(chat)).username)
+        chat_id = create_chat(name, "chat", str(current_user.id))
+        database.add_chat(int(chat), chat_id)
+        database.add_user_to_chat(int(chat), chat_id)
+        auth.refresh_db()
+        return {"id": chat_id}
+    if not check(current_user.id, chat):
+        raise Error.CHAT_FORBIDDEN
+    return EventSourceResponse(event_generator(request, chat))
 
 
 @app.post("/token")
@@ -123,27 +173,8 @@ async def create(
     return {chat.name: id}
 
 
-@app.get("/c/{chat}")
-def get_chat(
-    current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
-    chat: str
-):
-    if database.get_chat(int(chat)) == -1 and len(chat) == 10:
-        raise Error.CHAT_NOT_FOUND
-    if database.get_chat(int(chat)) == -1 and len(chat) == 8:
-        name = current_user.username + " , " + str(database.get_user_by_id(int(chat)).username)
-        chat_id = create_chat(name, "chat", str(current_user.id))
-        database.add_chat(int(chat), chat_id)
-        database.add_user_to_chat(int(chat), chat_id)
-        auth.refresh_db()
-        return {"id": chat_id}
-    if not check(current_user.id, chat):
-        raise Error.CHAT_FORBIDDEN
-    return database.get_messages(chat)
-
-
 @app.get("/c/{chat}/{id}")
-def get_message(
+async def get_message(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     chat: int,
     id: int
@@ -154,7 +185,7 @@ def get_message(
 
 
 @app.post("/c/{chat}/{id}/edit")
-def edit_message(
+async def edit_message(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     chat: int,
     id: int,
@@ -171,7 +202,7 @@ def edit_message(
 
 
 @app.post("/c/{chat}/{id}/delete")
-def edit_message(
+async def edit_message(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     chat: int,
     id: int
@@ -186,7 +217,7 @@ def edit_message(
 
 
 @app.get("/media/{hash}")
-def get_media(
+async def get_media(
     hash: str
 ):
     result = database.get_media(hash)
@@ -206,7 +237,7 @@ def get_media(
 
 
 @app.get("/")
-def invite_from_link(
+async def invite_from_link(
     invite: str
 ):
     return database.get_chat_from_invite(invite)
@@ -277,7 +308,7 @@ async def search_users(
 
 
 @app.get("/get/{root}/{dest}/{data}")
-def get_resource(
+async def get_resource(
     root: str,
     dest: str,
     data: str
