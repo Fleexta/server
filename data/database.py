@@ -4,6 +4,7 @@ import sqlite3
 
 import images
 from data.tables import Account, Message
+from exceptions import Error
 
 
 def db(edit: bool = False):
@@ -11,7 +12,10 @@ def db(edit: bool = False):
         def wrapper(*args):
             con = sqlite3.connect("db.sql")
             cur = con.cursor()
-            f = func(*args, cur)
+            try:
+                f = func(*args, cur)
+            except IndexError:
+                raise Error.NOT_FOUND
             if edit:
                 con.commit()
             con.close()
@@ -170,6 +174,16 @@ def get_user_avatar(id, cur):
     WHERE id = ?)""", (id, )).fetchall()[0][0]
 
 
+@db(True)
+def set_user_avatar(avatar, id, cur):
+    cur.execute("""
+    UPDATE Profiles
+    SET avatar = ?
+    WHERE id = (
+    SELECT profile FROM Accounts
+    WHERE id = ?)""", (avatar, id))
+
+
 @db()
 def get_user_about(id, cur):
     return cur.execute("""
@@ -180,10 +194,19 @@ def get_user_about(id, cur):
 
 
 @db()
-def get_user_name(id, cur):
+def get_username(id, cur):
     return cur.execute("""
     SELECT username FROM Accounts
     WHERE id = ?""", (id, )).fetchall()[0][0]
+
+
+@db()
+def get_name(id, cur):
+    return cur.execute("""
+    SELECT name FROM Profiles
+    WHERE id = (
+    SELECT profile FROM Accounts
+    WHERE id = ?)""", (id, )).fetchall()[0][0]
 
 
 @db()
@@ -191,6 +214,14 @@ def get_chat_avatar(id, cur):
     return cur.execute("""
     SELECT avatar FROM Chats
     WHERE id = ?""", (id, )).fetchall()[0][0]
+
+
+@db(True)
+def set_chat_avatar(avatar, id, cur):
+    cur.execute("""
+    UPDATE Chats
+    SET avatar = ?
+    WHERE id = ?""", (avatar, id))
 
 
 @db()
@@ -255,7 +286,75 @@ def get_media(key, cur):
     WHERE id = ?""", (key, )).fetchall()[0]
 
 
+@db()
+def get_chat_from_invite(key, cur):
+    return cur.execute("""
+    SELECT value FROM Invites
+    WHERE id = ?""", (key, )).fetchall()[0][0]
+
+
+@db()
+def get_chat_invite(chat, cur):
+    invite = cur.execute("""
+    SELECT invite FROM Chats
+    WHERE id = ?""", (chat, )).fetchall()[0][0]
+    if invite is None:
+        return -1
+    else:
+        return invite
+
+
 @db(True)
 def upload_media(id, media, cur):
     cur.execute("""
-    INSERT INTO Media (id, value) VALUES (?, ?)""", (id, media)).fetchall()
+    INSERT INTO Media (id, value) VALUES (?, ?)""", (id, media))
+
+
+@db(True)
+def upload_invite(id, name, value, cur):
+    cur.execute("""
+    INSERT INTO Invites (id, name, value) VALUES (?, ?, ?)""", (id, name, value))
+
+
+@db(True)
+def update_invites_from_chat(chat, invite, cur):
+    cur.execute("""
+    UPDATE Chats
+    SET invite = ?
+    WHERE id = ?""", (invite, chat))
+
+
+@db(True)
+def update_username(id, username, cur):
+    cur.execute("""
+    UPDATE Accounts
+    SET username = ?
+    WHERE id = ?""", (username, id))
+
+
+@db(True)
+def update_email(id, email, cur):
+    cur.execute("""
+    UPDATE Accounts
+    SET email = ?
+    WHERE id = ?""", (email, id))
+
+
+@db(True)
+def update_about(id, about, cur):
+    cur.execute("""
+    UPDATE Profile
+    SET about = ?
+    WHERE id = (
+    SELECT profile FROM Accounts
+    WHERE id ?)""", (about, id))
+
+
+@db(True)
+def update_name(id, name, cur):
+    cur.execute("""
+    UPDATE Profile
+    SET name = ?
+    WHERE id = (
+    SELECT profile FROM Accounts
+    WHERE id ?)""", (name, id))

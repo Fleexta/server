@@ -20,6 +20,13 @@ class User(BaseModel):
     disabled: bool | None = None
 
 
+class UserData(BaseModel):
+    username: str
+    name: str
+    about: str
+    email: str
+
+
 class Chat(BaseModel):
     name: str
     types: str

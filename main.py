@@ -92,11 +92,6 @@ async def get_my_chats(
     return current_user.chats
 
 
-@app.get("/ping")
-async def ping():
-    return {"ping": "pong"}
-
-
 @app.post("/c/{dest}/send")
 async def send(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
@@ -210,6 +205,13 @@ def get_media(
     return response
 
 
+@app.get("/")
+def invite_from_link(
+    invite: str
+):
+    return database.get_chat_from_invite(invite)
+
+
 @app.post("/upload/media")
 async def upload_media(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
@@ -221,8 +223,52 @@ async def upload_media(
     return {"upload": hash}
 
 
+@app.post("/generate/invite/{dest}/{data}")
+async def generate_invite(
+    current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
+    dest: str,
+    data: int
+):
+    if dest != "chat" and dest != "call":
+        raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
+    hash = HashManager().hash
+    database.upload_invite(hash, dest, data)
+    if dest == "chat":
+        database.update_invites_from_chat(data, hash)
+    return {"generate": hash}
+
+
+@app.post("/media/edit/{dest}")
+async def edit_media(
+    current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
+    dest: str,
+    file: UploadFile
+):
+    contents = await file.read()
+    if dest == "avatar":
+        database.set_user_avatar(contents, current_user.id)
+        return {current_user.id: "ok"}
+    else:
+        raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@app.post("/account/edit/{dest}")
+async def edit_account(
+    current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
+    user_data: classes.UserData
+):
+    if not (user_data.name is None):
+        database.update_name(current_user.id, user_data.name)
+    if not (user_data.about is None):
+        database.update_about(current_user.id, user_data.name)
+    if not (user_data.email is None):
+        database.update_email(current_user.id, user_data.email)
+    if not (user_data.username is None):
+        database.update_username(current_user.id, user_data.username)
+
+
 @app.get("/search/{username}")
-async def upload_media(
+async def search_users(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     username: str
 ):
@@ -243,8 +289,10 @@ def get_resource(
                 img_data = database.get_user_avatar(id)
                 image_stream = io.BytesIO(img_data)
                 return StreamingResponse(image_stream, media_type="image/png")
+            case "username":
+                return {id: "@" + database.get_username(id)}
             case "name":
-                return {id: database.get_user_name(id)}
+                return {id: database.get_name(id)}
             case "about":
                 return {id: database.get_user_about(id)}
     elif root == "chat":
@@ -254,8 +302,12 @@ def get_resource(
                 img_data = database.get_chat_avatar(id)
                 image_stream = io.BytesIO(img_data)
                 return StreamingResponse(image_stream, media_type="image/png")
+            case "name":
+                return {id: database.get_chat_name(id)}
             case "members":
-                return database.get_chat_members(id)
+                return {id: database.get_chat_members(id)}
+            case "invite":
+                return {id: database.get_chat_invite(id)}
     else:
         raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
 
