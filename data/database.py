@@ -305,9 +305,9 @@ def get_chat_invite(chat, cur):
 
 
 @db(True)
-def upload_media(id, media, cur):
+def upload_media(id, name, media, cur):
     cur.execute("""
-    INSERT INTO Media (id, value) VALUES (?, ?)""", (id, media))
+    INSERT INTO Media (id, name, value) VALUES (?, ?, ?)""", (id, name, media))
 
 
 @db(True)

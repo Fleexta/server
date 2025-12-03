@@ -224,6 +224,19 @@ async def get_media(
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
+    filename, _ = result
+
+    return filename
+
+
+@app.get("/download/{hash}")
+async def get_media(
+    hash: str
+):
+    result = database.get_media(hash)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+
     filename, blob_data = result
 
     mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -250,7 +263,7 @@ async def upload_media(
 ):
     contents = await file.read()
     hash = HashManager().hash
-    database.upload_media(hash, contents)
+    database.upload_media(hash, file.filename, contents)
     return {"upload": hash}
 
 
