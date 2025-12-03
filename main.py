@@ -120,9 +120,11 @@ async def login_for_access_token(
 
 @app.post("/reg")
 async def register_account(
-        form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+        # form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+        form_data: classes.RegistrationForm
+):
     if data.database.get_user(form_data.username) == -1:
-        auth.create_user(form_data.username, form_data.password)
+        auth.create_user(form_data.username, form_data.password, form_data.name)
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Change login")
     return {"registration": "ok", "login": form_data.username}
@@ -202,7 +204,7 @@ async def edit_message(
 
 
 @app.post("/c/{chat}/{id}/delete")
-async def edit_message(
+async def delete_message(
     current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     chat: int,
     id: int
@@ -251,9 +253,14 @@ async def get_media(
 
 @app.get("/")
 async def invite_from_link(
+    current_user: Annotated[classes.User, Depends(auth.get_current_active_user)],
     invite: str
 ):
-    return database.get_chat_from_invite(invite)
+    chat_id = database.get_chat_from_invite(invite)
+    database.add_chat(current_user.id, chat_id)
+    database.add_user_to_chat(current_user.id, chat_id)
+    auth.refresh_db()
+    return
 
 
 @app.post("/upload/media")

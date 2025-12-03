@@ -27,6 +27,12 @@ class UserData(BaseModel):
     email: str
 
 
+class RegistrationForm(BaseModel):
+    username: str
+    name: str
+    password: str
+
+
 class Chat(BaseModel):
     name: str
     types: str

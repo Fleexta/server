@@ -115,10 +115,10 @@ def delete_message(chat, id, cur):
 
 
 @db(True)
-def create_user(username, password, id, cur):
+def create_user(name, username, password, id, cur):
     avatar = images.generate_avatar(username)
     cur.execute("""
-    INSERT INTO Profiles (avatar) VALUES (?)""", (avatar, )).fetchall()
+    INSERT INTO Profiles (avatar, name) VALUES (?, ?)""", (avatar, name)).fetchall()
     profile = cur.execute("""
     SELECT id FROM Profiles ORDER BY id DESC LIMIT 1;
     """).fetchall()[0][0]

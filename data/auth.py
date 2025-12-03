@@ -89,10 +89,10 @@ async def get_current_active_user(
     return current_user
 
 
-def create_user(username: str, password: str):
+def create_user(username: str, password: str, name: str):
     id = random.randint(10000000, 99999999)
     if database.is_available_id("Accounts", id):
-        database.create_user(username, get_password_hash(password), id)
+        database.create_user(name, username, get_password_hash(password), id)
     else:
-        create_user(username, password)
+        create_user(username, password, name)
     refresh_db()
